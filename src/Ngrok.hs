@@ -81,7 +81,7 @@ import Data.HashMap.Strict (HashMap)
 import Data.Text (Text)
 import Data.Time
 import Data.Vector (Vector)
-import Network.HTTP.Client hiding (Request)
+import Network.HTTP.Client hiding (Request, method)
 import qualified Network.HTTP.Client as C
 import Network.HTTP.Types
 import Network.HTTP.Types.QueryLike
@@ -110,6 +110,9 @@ data Ngrok = Ngrok
              , ngrokBaseRequest :: C.Request
              }
 
+-- | Create an ngrok client handle from an arbitrary request and handle.
+-- With this configuration, it is your responsibility to set any headers
+-- or otherwise configure the base request appropriately.
 customNgrokClient :: Manager -> C.Request -> Ngrok
 customNgrokClient = Ngrok
 
@@ -127,7 +130,9 @@ ngrok c = do
 newtype TunnelName = TunnelName Text
                    deriving (Show, ToJSON, FromJSON)
 
-data NewTunnelProtocol = NewHttpTunnel | NewTcpTunnel | NewTlsTunnel
+data NewTunnelProtocol = NewHttpTunnel
+                       | NewTcpTunnel
+                       | NewTlsTunnel
               deriving (Show)
 
 instance ToJSON NewTunnelProtocol where
@@ -256,6 +261,8 @@ data TunnelConfig = TunnelConfig
                     }
                   deriving (Show)
 
+makeFields ''TunnelConfig
+
 data ConnMetrics = ConnMetrics
                    { connMetricsCount  :: Double
                    , connMetricsGauge  :: Double
@@ -268,6 +275,8 @@ data ConnMetrics = ConnMetrics
                    , connMetricsP99    :: Double
                    }
                  deriving (Show)
+
+makeFields ''ConnMetrics
 
 instance ToJSON ConnMetrics where
   toJSON m = object [ "count" .= connMetricsCount m
@@ -306,6 +315,8 @@ data HttpMetrics = HttpMetrics
                    }
                  deriving (Show)
 
+makeFields ''HttpMetrics
+
 instance ToJSON HttpMetrics where
   toJSON m = object [ "count" .= httpMetricsCount m
                     , "rate1" .= httpMetricsRate1 m
@@ -335,6 +346,8 @@ data TunnelMetrics = TunnelMetrics
                      }
                    deriving (Show)
 
+makeFields ''TunnelMetrics
+
 instance ToJSON TunnelMetrics where
   toJSON m = object [ "conns" .= tunnelMetricsConns m
                     , "http" .= tunnelMetricsHttp m
@@ -355,6 +368,8 @@ data TunnelInfo = TunnelInfo
                   , tunnelInfoMetrics   :: TunnelMetrics
                   }
                 deriving (Show)
+
+makeFields ''TunnelInfo
 
 instance ToJSON TunnelInfo where
   toJSON t = object [ "name" .= tunnelInfoName t
@@ -381,6 +396,8 @@ data TunnelsList = TunnelsList
                    }
                  deriving (Show)
 
+makeFields ''TunnelsList
+
 instance ToJSON TunnelsList where
   toJSON l = object [ "tunnels" .= tunnelsListTunnels l
                     , "uri" .= tunnelsListUri l
@@ -404,9 +421,11 @@ data Request = Request
                }
              deriving (Show)
 
+makeFields ''Request
+
 data CapturedRequest = CapturedRequest
-                       { capturedRequestUri :: Text
-                       , capturedRequest    :: RequestId
+                       { capturedRequestUri        :: Text
+                       , capturedRequest           :: RequestId
                        , capturedRequestTunnelName :: TunnelName
                        , capturedRequestRemoteAddr :: Text
                        , capturedRequestStart      :: UTCTime
@@ -415,22 +434,26 @@ data CapturedRequest = CapturedRequest
                        }
                      deriving (Show)
 
+makeFields ''CapturedRequest
+
 data CapturedRequests = CapturedRequests
                         { capturedRequestsUri      :: Text
                         , capturedRequestsRequests :: Vector CapturedRequest
                         }
                       deriving (Show)
 
+makeFields ''CapturedRequests
+
 get :: (QueryLike q, FromJSON a) => Ngrok -> [Text] -> q -> IO a
 get (Ngrok m r) p q = do
-  resp <- httpLbs (r { method = methodGet
+  resp <- httpLbs (r { C.method = methodGet
                      , path = toByteString $ encodePathSegments p
                      , queryString = renderQuery True $ toQuery q
                      }) m
   respJSON resp
 
 post :: ToJSON a => Ngrok -> [Text] -> a -> IO (C.Response L.ByteString)
-post (Ngrok m r) p j = httpLbs (r { method = methodPost
+post (Ngrok m r) p j = httpLbs (r { C.method = methodPost
                                   , path = toByteString $ encodePathSegments p
                                   , requestBody = RequestBodyLBS $ encode j
                                   }) m
@@ -439,7 +462,7 @@ post' :: QueryLike q => Ngrok -> [Text] -> q -> IO (C.Response L.ByteString)
 post' = undefined
 
 delete :: QueryLike q => Ngrok -> [Text] -> q -> IO ()
-delete (Ngrok m r) p q = void $ httpLbs (r { method = methodDelete
+delete (Ngrok m r) p q = void $ httpLbs (r { C.method = methodDelete
                                            , path = toByteString $ encodePathSegments p
                                            , queryString = renderQuery True $ toQuery q
                                            }) m
